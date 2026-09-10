@@ -42,7 +42,9 @@ function StockPageInner() {
     if (clamped !== params.page) {
       updateParams({ page: clamped });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitting
+    // updateParams: it's derived fresh from `params` every render, so including it
+    // would re-run this effect on every render instead of only when data/page change.
   }, [data, params.page]);
 
   const currentUrl = `${pathname}${stockParamsToSearch(params)}`;

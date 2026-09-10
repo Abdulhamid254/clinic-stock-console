@@ -43,7 +43,10 @@ export function StockCorrectionDialog({ product, open, onOpenChange }: StockCorr
       reset({ stock: product.stock });
       mutation.reset();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitting
+    // `reset` and `mutation`: both are recreated every render by react-hook-form /
+    // TanStack Query, so including them would re-run this on every render instead
+    // of only when the dialog opens or the underlying product's stock changes.
   }, [open, product.stock]);
 
   async function onSubmit(values: StockCorrectionValues) {

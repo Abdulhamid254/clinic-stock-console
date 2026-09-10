@@ -39,7 +39,9 @@ export function FiltersBar({ params, onChange }: FiltersBarProps) {
     if (searchDraft === params.q) return;
     const handle = setTimeout(() => onChange({ q: searchDraft }), 350);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally re-running
+    // only on searchDraft: including `params.q` here would fire the debounce timer
+    // on every external URL change too, not just local typing.
   }, [searchDraft]);
 
   const currentSortValue = `${params.sortBy}-${params.order}`;

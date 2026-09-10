@@ -19,8 +19,9 @@ module.exports = {
     'no-console': ['warn', { allow: ['warn', 'error'] }],
 
     // exhaustive-deps has real false positives in this codebase: the debounce
-    // effect in filters-bar.tsx and the dialog-reset effect in
-    // stock-correction-dialog.tsx both deliberately omit a dependency to avoid
+    // effect in filters-bar.tsx, the dialog-reset effect in
+    // stock-correction-dialog.tsx, and the page-clamp effect in
+    // app/stock/page.tsx all deliberately omit a dependency to avoid
     // re-running on every keystroke/render. Kept as a warning (not off) so a
     // genuinely missing dependency elsewhere still gets flagged.
     'react-hooks/exhaustive-deps': 'warn',
