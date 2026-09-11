@@ -14,7 +14,7 @@ export function PaginationControls({ page, total, onPageChange }: PaginationCont
 
   return (
     <nav className="flex items-center justify-between pt-2" aria-label="Pagination">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-slate-500">
         Page {page} of {totalPages} &middot; {total} item{total === 1 ? '' : 's'}
       </p>
       <div className="flex gap-2">
