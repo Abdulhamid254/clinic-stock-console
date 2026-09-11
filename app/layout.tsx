@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthProvider } from '@/components/providers/auth-provider';
 import { ToastProvider } from '@/components/ui/toast';
+import { OfflineBanner } from '@/components/shared/offline-banner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <AuthProvider>
             <ToastProvider>
+              <OfflineBanner />
               <main id="main-content">{children}</main>
             </ToastProvider>
           </AuthProvider>
