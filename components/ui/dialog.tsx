@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 interface DialogProps {
@@ -20,6 +20,7 @@ interface DialogProps {
  */
 export function Dialog({ open, onClose, title, description, children, className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -37,13 +38,13 @@ export function Dialog({ open, onClose, title, description, children, className 
         // Click on the <dialog> backdrop itself (not its content) closes it.
         if (e.target === e.currentTarget) onClose();
       }}
-      aria-labelledby="dialog-title"
+      aria-labelledby={titleId}
       className={cn(
         'w-[90vw] max-w-md rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-black/50',
         className,
       )}
     >
-      <h2 id="dialog-title" className="text-lg font-semibold">
+      <h2 id={titleId} className="text-lg font-semibold">
         {title}
       </h2>
       {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
