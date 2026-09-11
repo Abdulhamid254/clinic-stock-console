@@ -18,15 +18,34 @@ interface StockCorrectionDialogProps {
 }
 
 /**
- * Decision: the Save button is disabled (not spinner-while-clickable) during
- * the mutation, matching the pending-state pattern used on the login form.
- * On failure we keep the dialog open and the field populated with what the
- * user typed, roll back the optimistic cache value, and show the error
- * inline with a retry action.
+ * Click-to-response contract for this dialog:
+ *  - Click Save -> button reads "Saving…" and disables, the whole form
+ *    (including Cancel and the input) disables too, so the mutation can't
+ *    be dismissed or re-submitted mid-flight. The stock value elsewhere in
+ *    the app (table row, detail header) updates immediately via the
+ *    optimistic cache patch in useCorrectStock — the user doesn't wait on
+ *    the network to see their change.
+ *  - Success -> toast confirmation, dialog closes. The optimistic value
+ *    stands as-is (it's already what the server echoed back).
+ *  - Failure -> the optimistic cache patch is rolled back automatically
+ *    (useCorrectStock's onError), so the stock shown everywhere else in the
+ *    app reverts to the real prior value. This dialog itself stays open
+ *    with whatever the user typed still in the field (so retrying doesn't
+ *    mean retyping), shows the actual error inline, and the Save button
+ *    becomes "Retry save". An error toast fires too, in case the dialog is
+ *    ever reached from a state where the inline message isn't visible.
  */
 export function StockCorrectionDialog({ product, open, onOpenChange }: StockCorrectionDialogProps) {
   const mutation = useCorrectStock(String(product.id));
   const { showToast } = useToast();
+
+  function requestClose() {
+    // Ignore Esc / backdrop click / Cancel while a save is in flight, so the
+    // user can't dismiss the dialog out from under a pending mutation and
+    // lose track of whether it succeeded or failed.
+    if (mutation.isPending) return;
+    onOpenChange(false);
+  }
 
   const {
     register,
@@ -54,54 +73,61 @@ export function StockCorrectionDialog({ product, open, onOpenChange }: StockCorr
       await mutation.mutateAsync({ id: product.id, stock: values.stock });
       showToast('Stock count updated');
       onOpenChange(false);
-    } catch {
-      // Error is shown inline below; dialog stays open, value stays as typed.
+    } catch (err) {
+      // Cache rollback already happened inside useCorrectStock's onError.
+      // Here we just surface it: inline message stays with the dialog,
+      // toast covers the case where the dialog isn't on screen for some
+      // reason (e.g. a future "quick edit" entry point reusing this hook).
+      const message = err instanceof Error ? err.message : 'Could not save the new stock count.';
+      showToast(message, 'error');
     }
   }
 
   return (
     <Dialog
       open={open}
-      onClose={() => onOpenChange(false)}
+      onClose={requestClose}
       title="Correct stock count"
       description={`Update the current stock level for ${product.title}.`}
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-        <div className="space-y-1.5">
-          <label htmlFor="stock" className="text-sm font-medium">
-            New stock count
-          </label>
-          <Input
-            id="stock"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step={1}
-            aria-invalid={!!errors.stock}
-            {...register('stock')}
-          />
-          {errors.stock && (
-            <p role="alert" className="text-sm text-red-600">
-              {errors.stock.message}
+        <fieldset disabled={mutation.isPending} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="stock" className="text-sm font-medium">
+              New stock count
+            </label>
+            <Input
+              id="stock"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              aria-invalid={!!errors.stock}
+              {...register('stock')}
+            />
+            {errors.stock && (
+              <p role="alert" className="text-sm text-red-600">
+                {errors.stock.message}
+              </p>
+            )}
+          </div>
+
+          {mutation.isError && (
+            <p role="alert" className="text-sm font-medium text-red-600">
+              {mutation.error instanceof Error ? mutation.error.message : 'Could not save the new stock count.'} The
+              previous value has been restored on screen — please try again.
             </p>
           )}
-        </div>
 
-        {mutation.isError && (
-          <p role="alert" className="text-sm font-medium text-red-600">
-            Could not save the new stock count. The previous value has been restored on screen.
-            Please try again.
-          </p>
-        )}
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : mutation.isError ? 'Retry save' : 'Save'}
-          </Button>
-        </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Saving…' : mutation.isError ? 'Retry save' : 'Save'}
+            </Button>
+          </div>
+        </fieldset>
       </form>
     </Dialog>
   );

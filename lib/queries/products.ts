@@ -29,12 +29,30 @@ export function productsQueryKey(params: StockQueryParams) {
   return ['products', params] as const;
 }
 
+/**
+ * staleTime/gcTime: Infinity is deliberate, not an oversight. This was the
+ * root cause of "stock correction reverts when you navigate away and back
+ * (or wait a bit) without a hard refresh": with a finite staleTime, React
+ * Query's default refetchOnMount behaviour fires a silent background
+ * refetch the next time this exact param combination remounts (e.g. paging
+ * off /stock and back, or just re-rendering after the old 15s window
+ * elapsed). Since DummyJSON's PUT is a mock that never persists server-side,
+ * that "harmless" background refetch was overwriting the optimistic patch
+ * with the original, uncorrected stock number a few seconds after the user
+ * saw it succeed — no error, no visible network activity, just a silent
+ * revert. Because this session's corrections have nowhere durable to live
+ * except this cache, the cache has to be treated as the source of truth for
+ * the life of the tab: never auto-revalidated, only ever updated by an
+ * explicit mutation or an explicit user-initiated retry (see ErrorState's
+ * onRetry, which still works for genuine fetch failures).
+ */
 export function useProducts(params: StockQueryParams) {
   return useQuery({
     queryKey: productsQueryKey(params),
     queryFn: () => apiFetch<ProductListResponse>(buildProductsUrl(params)),
     placeholderData: keepPreviousData,
-    staleTime: 15_000,
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 }
 
@@ -56,6 +74,12 @@ export function useProduct(id: string) {
       if (status === 404) return false;
       return failureCount < 2;
     },
+    // See the comment on useProducts above: same reasoning applies to the
+    // single-item cache. Without this, leaving the item detail page and
+    // coming back (fresh mount, same id) triggered a refetch that clobbered
+    // the correction with the mock server's original value.
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 }
 
@@ -129,20 +153,35 @@ export function useCorrectStock(id: string) {
   });
 }
 
+export interface BulkCorrectStockResult {
+  failedIds: number[];
+}
+
 /**
  * Same idea as useCorrectStock, but applies one stock value to several
  * products in a single action (bulk correction). Each product's list-cache
  * entries and, if present, its own detail cache are patched together so the
  * table and any already-open detail pages agree immediately.
+ *
+ * Failure handling is per-item, not all-or-nothing: DummyJSON has no bulk
+ * endpoint, so this fires N independent PUTs via Promise.allSettled, and
+ * some can fail while others succeed (e.g. one bad id in the selection).
+ * `mutationFn` never throws for a partial failure — it always resolves with
+ * `failedIds` — because a thrown error would make TanStack Query's onError
+ * roll back *everything*, discarding the items that genuinely succeeded.
+ * Instead, onSuccess inspects failedIds itself and rolls back only those,
+ * using previousStockById (captured in onMutate, before any optimistic
+ * patch) so each failed item is restored to its own real prior value rather
+ * than whatever the last successful item happened to leave behind.
+ * onError is kept only for the case mutationFn itself throws (e.g. a bug
+ * before any request goes out) and still reverts the full optimistic patch,
+ * since in that case we have no partial result to reason about.
  */
 export function useBulkCorrectStock() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ ids, stock }: { ids: number[]; stock: number }) => {
-      // DummyJSON has no bulk endpoint, so this is N individual PUTs. We
-      // still treat it as one mutation/one optimistic update from the UI's
-      // point of view, and report which ones actually failed.
+    mutationFn: async ({ ids, stock }: { ids: number[]; stock: number }): Promise<BulkCorrectStockResult> => {
       const results = await Promise.allSettled(
         ids.map((id) => apiFetch<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify({ stock }) })),
       );
@@ -158,6 +197,17 @@ export function useBulkCorrectStock() {
         (id) => [String(id), queryClient.getQueryData<Product>(['product', String(id)])] as const,
       );
 
+      // Snapshot each affected id's pre-mutation stock from whichever cached
+      // list page currently has it. This is what onSuccess uses to restore
+      // just the failed subset without needing a detail-cache entry (which
+      // may not exist if the user never opened that item's page).
+      const previousStockById = new Map<number, number>();
+      previousLists.forEach(([, data]) => {
+        data?.products.forEach((p) => {
+          if (idSet.has(p.id) && !previousStockById.has(p.id)) previousStockById.set(p.id, p.stock);
+        });
+      });
+
       queryClient.setQueriesData<ProductListResponse>({ queryKey: ['products'] }, (old) => {
         if (!old) return old;
         return {
@@ -169,7 +219,7 @@ export function useBulkCorrectStock() {
         if (previous) queryClient.setQueryData<Product>(['product', idStr], { ...previous, stock });
       });
 
-      return { previousLists, previousProducts };
+      return { previousLists, previousProducts, previousStockById };
     },
     onError: (_err, _vars, context) => {
       context?.previousLists?.forEach(([key, data]) => {
@@ -177,6 +227,27 @@ export function useBulkCorrectStock() {
       });
       context?.previousProducts?.forEach(([idStr, previous]) => {
         if (previous) queryClient.setQueryData(['product', idStr], previous);
+      });
+    },
+    onSuccess: (result, _vars, context) => {
+      if (result.failedIds.length === 0 || !context) return;
+      const failedSet = new Set(result.failedIds);
+
+      queryClient.setQueriesData<ProductListResponse>({ queryKey: ['products'] }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          products: old.products.map((p) => {
+            if (!failedSet.has(p.id)) return p;
+            const previousStock = context.previousStockById.get(p.id);
+            return previousStock === undefined ? p : { ...p, stock: previousStock };
+          }),
+        };
+      });
+      context.previousProducts.forEach(([idStr, previous]) => {
+        if (previous && failedSet.has(Number(idStr))) {
+          queryClient.setQueryData(['product', idStr], previous);
+        }
       });
     },
   });

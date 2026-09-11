@@ -74,8 +74,10 @@ so cutting them would mean re-implementing the same logic by hand with more risk
   explicitly in `tests/search-race.test.ts` and manually against `?delay=2000` / `?delay=0`.
 - `placeholderData: keepPreviousData` on the list query keeps the previous page's rows visible
   (dimmed via `isFetching`) while a new page/filter loads, instead of flashing a full skeleton.
-- `staleTime: 15s` on the list, `Infinity` on `/auth/me` (only invalidated by an explicit logout or a
-  fresh login), 5 minutes on categories (rarely changes).
+- `staleTime: Infinity` (and `gcTime: Infinity`) on both the product list and the single-product
+  query, `Infinity` on `/auth/me` (only invalidated by an explicit logout or a fresh login), 5 minutes
+  on categories (rarely changes). See "Why the product queries never auto-refetch" below — this isn't
+  the React Query default and is load-bearing for stock corrections not reverting.
 - Stock correction uses `onMutate`/`onError`/`onSuccess` for an optimistic update with rollback (see
   Phase 4 decision below).
 
@@ -115,6 +117,29 @@ layout, not a CSS shrink.
 - **`PUT /products/{id}` doesn't persist server-side.** The optimistic cache update
   (`useCorrectStock` in `lib/queries/products.ts`) stands in as the "real" outcome for the session —
   the UI behaves exactly as if the save persisted, for as long as the tab stays open.
+
+### Why the product queries never auto-refetch
+
+Because writes don't persist server-side, any background refetch of `['product', id]` or
+`['products', ...]` after a correction will always re-serve the *original* value — the mock server
+has no idea a PUT ever happened. React Query's defaults (`staleTime: 0`, `refetchOnMount: true`)
+fire exactly that kind of "harmless" background refetch the moment a query remounts with data older
+than its staleTime — e.g. navigating from the item detail page back to `/stock` and back again, or
+just leaving a list page open past its staleTime. The symptom was a stock correction silently
+reverting to its pre-correction value a few seconds after being saved, with no error and no visible
+network activity, reported as "goes back to the initial value... when refreshed."
+
+The fix: `useProduct` and `useProducts` both use `staleTime: Infinity, gcTime: Infinity`. Once a
+query has data, nothing refetches it automatically for the rest of the tab's life; the cache *is*
+the source of truth, updated only by an explicit mutation or by `ErrorState`'s "Try again" button
+(a genuine, user-initiated refetch, which still works normally for actual fetch failures — that's a
+different query state, `isError`, not a background revalidation of already-successful data).
+Regression coverage: `tests/optimistic-rollback.test.ts` → *"keeps a corrected value in cache
+indefinitely — no automatic revert on remount."*
+
+The trade-off: if this were a real backend shared across users/devices, `staleTime: Infinity` would
+mean never seeing someone else's change without a manual reload. For a single-operator session
+against a mock API, that trade-off is the right one — see the decision log entry below.
 - **No combined search+category+sort** — see above.
 - **`/auth/me` after refresh** — a successful `/auth/refresh` sets a new access token in memory; the
   next `/auth/me` call (or any authenticated call) uses it transparently via `apiFetch`, no manual
@@ -171,18 +196,17 @@ layout, not a CSS shrink.
   simpler, safer default for a form that mutates a shared resource, and we kept it consistent across
   both forms in the app rather than mixing patterns.
 
-**5. Debounce (350ms) and list `staleTime` (15s) for the search box**
-- *Decision:* 350ms debounce on the raw keystrokes before writing to the URL; 15s `staleTime` on the
-  products list query.
+**5. Debounce (350ms) for the search box**
+- *Decision:* 350ms debounce on the raw keystrokes before writing to the URL.
 - *Rejected alternative:* No debounce (write every keystroke straight to the URL), or a much longer
   debounce (~800ms+).
 - *Why:* Sub-300ms debounces still generate a request-per-keystroke for fast typists; anything much
   past 400ms starts to feel unresponsive on a search box. 350ms is deliberately still fast enough
   that the race-condition guarantee (an old, slow response never overwriting a new, fast one) has to
   do real work rather than being masked by a debounce so long it rarely fires two overlapping
-  requests — verified with `?delay=2000` against `?delay=0` and in `tests/search-race.test.ts`. The
-  15s `staleTime` avoids refetching identical filter combinations the user bounces between (e.g.
-  toggling a sort order back and forth) within the same short session.
+  requests — verified with `?delay=2000` against `?delay=0` and in `tests/search-race.test.ts`.
+  (The list query originally also carried a 15s `staleTime` for the same "don't refetch a filter
+  combo the user just bounced away from" reasoning — see decision #7 for why that became `Infinity`.)
 
 **6. Bulk correction patches every cache entry that holds the item, not just the one being viewed**
 - *Decision:* both `useCorrectStock` and `useBulkCorrectStock` patch the single-item cache
@@ -199,6 +223,24 @@ layout, not a CSS shrink.
   for the session. `tests/optimistic-rollback.test.ts` covers both the patch and its rollback at the
   list-cache level, specifically to guard against this regressing again.
 
+**7. `staleTime`/`gcTime`: `Infinity` on the product queries, not a longer finite value**
+- *Decision:* `useProduct` and `useProducts` never consider their cached data stale and never garbage
+  collect it while the tab is open.
+- *Rejected alternative:* keep the original 15s (list) / default 0s (detail) staleTime, or just bump
+  both to something longer like 5 minutes.
+- *Why:* this was a real, reported bug — a stock correction would silently revert to its
+  pre-correction value on its own, with no error, some time after being saved successfully. Root
+  cause: with any finite staleTime, React Query's default `refetchOnMount` fires a background refetch
+  the next time that exact query remounts with data older than its staleTime (leaving the item detail
+  page and coming back, revisiting a list page/filter combo, etc.). Since DummyJSON's `PUT` never
+  persists server-side, that refetch always re-serves the *original* value and overwrites the
+  optimistic patch. A longer finite value only widens the window before the same bug resurfaces; it
+  doesn't fix it. `Infinity` is the honest expression of the actual constraint: this mock backend
+  cannot produce a legitimately newer value than what's already in the cache, so there is nothing a
+  background refetch could ever correctly get us, only ways for it to get things wrong. See "Why the
+  product queries never auto-refetch" above and the regression test in
+  `tests/optimistic-rollback.test.ts`.
+
 ## Optional features
 
 The brief explicitly said not to attempt these at the cost of the required behaviour, so they were
@@ -210,8 +252,10 @@ added last, after the five graded outcomes above were re-verified working.
   ambiguous). A `BulkActionBar` appears once anything is selected; `BulkCorrectionDialog` applies one
   stock value to every selected item via `useBulkCorrectStock`, using the same optimistic-update/
   rollback shape as the single-item correction. DummyJSON has no bulk endpoint, so this is `N`
-  individual `PUT` requests under `Promise.allSettled`; a full rollback of the optimistic patch fires
-  if any of them fail.
+  individual `PUT` requests under `Promise.allSettled`. Failure is per-item, not all-or-nothing: items
+  that succeed keep their new value, items that fail are rolled back individually to their real prior
+  stock, and `BulkCorrectionDialog` reports the split honestly ("8 of 10 items updated, 2 failed and
+  have been restored") rather than a blanket success/failure message.
 - **Offline / reconnect indicator** — implemented. `OfflineBanner` listens to the browser's
   `online`/`offline` events and shows a persistent amber banner while offline, plus a brief green
   "Back online" confirmation on reconnect. This matters more here than in a typical app, given the
@@ -241,6 +285,20 @@ pass"):
       search/filter/sort/page both times.
 - [ ] Every data screen (list, detail, categories) shows loading, empty, and a recoverable error
       against `/http/500`.
+- [ ] Correct a single item's stock, navigate away (back to `/stock`, or to another item) and back —
+      the corrected value must still be there, not reverted. Repeat after leaving the tab idle for a
+      minute or more.
+- [ ] Correct stock from `/stock`'s table, then open that item's detail page — value matches. Correct
+      it again from the detail page, then go back to `/stock` — value matches there too, with no
+      refresh needed either direction.
+- [ ] Force a single-item stock save to fail (e.g. throttle to offline mid-save, or a mocked 500): the
+      dialog stays open, the field keeps what you typed, the visible stock elsewhere reverts to the
+      real prior value, Cancel/Save/the input are disabled only while the request is in flight, and
+      Save relabels to "Retry save".
+- [ ] Bulk-correct a selection where at least one id will fail (e.g. an id outside DummyJSON's real
+      range): the dialog reports how many succeeded vs failed, the succeeded rows keep the new value,
+      the failed rows revert to their real prior value, and the toast/inline message never claims a
+      full success when it wasn't one.
 - [ ] Full keyboard pass, and a check at 360px width.
 - [ ] Sit idle past 1 minute (token expiry), then act — session refreshes without losing place or
       showing a blank screen.
