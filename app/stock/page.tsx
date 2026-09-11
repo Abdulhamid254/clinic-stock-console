@@ -1,10 +1,12 @@
 'use client';
 
-import { Suspense, useCallback, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { FiltersBar } from '@/components/stock/filters-bar';
 import { StockTable } from '@/components/stock/stock-table';
 import { PaginationControls } from '@/components/stock/pagination-controls';
+import { BulkActionBar } from '@/components/stock/bulk-action-bar';
+import { BulkCorrectionDialog } from '@/components/stock/bulk-correction-dialog';
 import { LoadingState } from '@/components/shared/loading-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
@@ -19,6 +21,16 @@ function StockPageInner() {
 
   const params = parseStockParams(searchParams);
   const { data, isLoading, isFetching, isError, error, refetch } = useProducts(params);
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+
+  // Selection is scoped to the current page/filter view. Changing any of
+  // them changes which rows are even on screen, so a stale selection from a
+  // previous page would silently apply to the wrong items — clear it.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [params.q, params.category, params.sortBy, params.order, params.page]);
 
   const updateParams = useCallback(
     (patch: Partial<StockQueryParams>) => {
@@ -50,11 +62,27 @@ function StockPageInner() {
   const currentUrl = `${pathname}${stockParamsToSearch(params)}`;
   const hasActiveFilters = !!(params.q || params.category);
 
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (!data) return;
+    const pageIds = data.products.map((p) => p.id);
+    const allSelected = pageIds.every((id) => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(pageIds));
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
       <header>
         <h1 className="text-2xl font-semibold">Stock</h1>
-        <p className="text-sm text-muted-foreground">Search, filter, and correct ward stock counts.</p>
+        <p className="text-sm text-slate-500">Search, filter, and correct ward stock counts.</p>
       </header>
 
       <FiltersBar params={params} onChange={updateParams} />
@@ -75,8 +103,26 @@ function StockPageInner() {
         />
       ) : (
         <>
-          <StockTable products={data.products} returnTo={currentUrl} isRefreshing={isFetching} />
+          <BulkActionBar
+            count={selectedIds.size}
+            onCorrect={() => setBulkDialogOpen(true)}
+            onClear={() => setSelectedIds(new Set())}
+          />
+          <StockTable
+            products={data.products}
+            returnTo={currentUrl}
+            isRefreshing={isFetching}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+          />
           <PaginationControls page={params.page} total={data.total} onPageChange={(page) => updateParams({ page })} />
+          <BulkCorrectionDialog
+            ids={Array.from(selectedIds)}
+            open={bulkDialogOpen}
+            onOpenChange={setBulkDialogOpen}
+            onDone={() => setSelectedIds(new Set())}
+          />
         </>
       )}
     </div>
