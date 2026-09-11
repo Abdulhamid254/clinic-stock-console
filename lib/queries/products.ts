@@ -67,10 +67,21 @@ interface CorrectStockInput {
 /**
  * Optimistic stock correction. We update the cached product immediately so
  * the UI reflects the new count without waiting on the round trip, snapshot
- * the previous value for rollback, and roll back on failure. DummyJSON's PUT
- * doesn't persist server-side (mock API limitation, documented in README) —
- * the optimistic cache update stands in as the "real" outcome for the
- * session.
+ * the previous value(s) for rollback, and roll back on failure. DummyJSON's
+ * PUT doesn't persist server-side (mock API limitation, documented in
+ * README) — the optimistic cache update stands in as the "real" outcome for
+ * the session.
+ *
+ * Crucially, this patches BOTH the single-item cache (['product', id], used
+ * by the detail page) AND every cached stock-list page (['products', ...],
+ * one entry per filter/sort/page combination) that happens to contain this
+ * product. Patching only the detail cache was the original bug here: the
+ * list is a separate cache entry, so a corrected value would show on the
+ * detail page but silently revert to the old number the moment the user
+ * navigated back to /stock, since that cached list snapshot was never
+ * touched. We deliberately patch in place rather than invalidating/
+ * refetching the list — since PUT doesn't persist, a refetch would just
+ * pull the original, uncorrected value back from the mock server.
  */
 export function useCorrectStock(id: string) {
   const queryClient = useQueryClient();
@@ -81,23 +92,92 @@ export function useCorrectStock(id: string) {
         method: 'PUT',
         body: JSON.stringify({ stock }),
       }),
-    onMutate: async ({ stock }) => {
+    onMutate: async ({ id: productId, stock }) => {
       await queryClient.cancelQueries({ queryKey: ['product', id] });
-      const previous = queryClient.getQueryData<Product>(['product', id]);
-      if (previous) {
-        queryClient.setQueryData<Product>(['product', id], { ...previous, stock });
+      await queryClient.cancelQueries({ queryKey: ['products'] });
+
+      const previousProduct = queryClient.getQueryData<Product>(['product', id]);
+      const previousLists = queryClient.getQueriesData<ProductListResponse>({ queryKey: ['products'] });
+
+      if (previousProduct) {
+        queryClient.setQueryData<Product>(['product', id], { ...previousProduct, stock });
       }
-      return { previous };
+
+      queryClient.setQueriesData<ProductListResponse>({ queryKey: ['products'] }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          products: old.products.map((p) => (p.id === productId ? { ...p, stock } : p)),
+        };
+      });
+
+      return { previousProduct, previousLists };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['product', id], context.previous);
+      if (context?.previousProduct) {
+        queryClient.setQueryData(['product', id], context.previousProduct);
       }
+      context?.previousLists?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
     },
     onSuccess: (data) => {
       queryClient.setQueryData<Product>(['product', id], (old) =>
         old ? { ...old, stock: data.stock ?? old.stock } : old,
       );
+    },
+  });
+}
+
+/**
+ * Same idea as useCorrectStock, but applies one stock value to several
+ * products in a single action (bulk correction). Each product's list-cache
+ * entries and, if present, its own detail cache are patched together so the
+ * table and any already-open detail pages agree immediately.
+ */
+export function useBulkCorrectStock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ ids, stock }: { ids: number[]; stock: number }) => {
+      // DummyJSON has no bulk endpoint, so this is N individual PUTs. We
+      // still treat it as one mutation/one optimistic update from the UI's
+      // point of view, and report which ones actually failed.
+      const results = await Promise.allSettled(
+        ids.map((id) => apiFetch<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify({ stock }) })),
+      );
+      const failedIds = ids.filter((_, i) => results[i]!.status === 'rejected');
+      return { failedIds };
+    },
+    onMutate: async ({ ids, stock }) => {
+      await queryClient.cancelQueries({ queryKey: ['products'] });
+      const idSet = new Set(ids);
+
+      const previousLists = queryClient.getQueriesData<ProductListResponse>({ queryKey: ['products'] });
+      const previousProducts = ids.map(
+        (id) => [String(id), queryClient.getQueryData<Product>(['product', String(id)])] as const,
+      );
+
+      queryClient.setQueriesData<ProductListResponse>({ queryKey: ['products'] }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          products: old.products.map((p) => (idSet.has(p.id) ? { ...p, stock } : p)),
+        };
+      });
+      previousProducts.forEach(([idStr, previous]) => {
+        if (previous) queryClient.setQueryData<Product>(['product', idStr], { ...previous, stock });
+      });
+
+      return { previousLists, previousProducts };
+    },
+    onError: (_err, _vars, context) => {
+      context?.previousLists?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      context?.previousProducts?.forEach(([idStr, previous]) => {
+        if (previous) queryClient.setQueryData(['product', idStr], previous);
+      });
     },
   });
 }
