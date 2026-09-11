@@ -184,6 +184,52 @@ layout, not a CSS shrink.
   15s `staleTime` avoids refetching identical filter combinations the user bounces between (e.g.
   toggling a sort order back and forth) within the same short session.
 
+**6. Bulk correction patches every cache entry that holds the item, not just the one being viewed**
+- *Decision:* both `useCorrectStock` and `useBulkCorrectStock` patch the single-item cache
+  (`['product', id]`) and every cached stock-list page (`['products', ...]`) that contains the
+  affected product(s), in the same optimistic update / rollback pass.
+- *Rejected alternative:* patch only the cache for whatever screen triggered the correction (the
+  detail page), and rely on `invalidateQueries` to eventually bring the list back in sync.
+- *Why:* this was a real bug found during review — correcting stock from the detail page updated
+  only `['product', id]`, so the list looked unchanged (stale) until its 15s `staleTime` lapsed and a
+  refetch happened to fire. Worse, `invalidateQueries` isn't actually a fix here: since DummyJSON's
+  `PUT` doesn't persist server-side, a refetch would silently pull the *original*, uncorrected value
+  back from the mock server, undoing the correction the user just made. Patching every relevant cache
+  entry directly, without refetching, is the only way the optimistic value stays the source of truth
+  for the session. `tests/optimistic-rollback.test.ts` covers both the patch and its rollback at the
+  list-cache level, specifically to guard against this regressing again.
+
+## Optional features
+
+The brief explicitly said not to attempt these at the cost of the required behaviour, so they were
+added last, after the five graded outcomes above were re-verified working.
+
+- **Bulk correction** — implemented. Checkboxes per row (`StockTable`) plus a "select all on this
+  page" checkbox feed a `Set<number>` of selected ids (local UI state, cleared automatically whenever
+  the search/filter/sort/page changes, since a selection from a different result set would be
+  ambiguous). A `BulkActionBar` appears once anything is selected; `BulkCorrectionDialog` applies one
+  stock value to every selected item via `useBulkCorrectStock`, using the same optimistic-update/
+  rollback shape as the single-item correction. DummyJSON has no bulk endpoint, so this is `N`
+  individual `PUT` requests under `Promise.allSettled`; a full rollback of the optimistic patch fires
+  if any of them fail.
+- **Offline / reconnect indicator** — implemented. `OfflineBanner` listens to the browser's
+  `online`/`offline` events and shows a persistent amber banner while offline, plus a brief green
+  "Back online" confirmation on reconnect. This matters more here than in a typical app, given the
+  brief's own framing of ward tablets on patchy wifi — a failed save should look like a failed save,
+  not identical to a successful one.
+- **Virtualised scrolling of the full 194 items** — deliberately not implemented, and this is the one
+  place "optional" and "required" were genuinely in tension. Virtualising only pays off once you're
+  rendering a long, unpaginated list — which means fetching all 194 items in one request and dropping
+  the `page` parameter, since a virtualised window over a paginated fetch has nothing to virtualise (12
+  rows aren't worth it). But `page` is one of the four values the URL-state requirement (outcome #3)
+  explicitly has to preserve and restore, and the empty-page-strand requirement (outcome #2) is
+  specifically about page navigation. Reworking the data model to drop pagination risked regressing
+  both of those to add a feature the brief marked optional. If this becomes a real requirement later,
+  the cleanest path is probably a `view=all` URL flag that switches `useProducts` to an unpaginated
+  fetch and `StockTable` to a windowed render (e.g. `react-window`), left as a separate mode rather
+  than a replacement for the paginated one — but that's a deliberate follow-up, not something to bolt
+  on inside the current model.
+
 ## Manual acceptance checklist
 
 Re-run these against a deployed build before calling the app done (see brief §"Final acceptance
