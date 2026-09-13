@@ -1,7 +1,7 @@
 # Clinic Stock Console
 
-An internal console over the DummyJSON `/products` API, treated as a stock catalogue, for a clinic
-supplies team on ward tablets over patchy wifi.
+An Inventory system for a clinic
+supplies team that helps the manage their stocks to ensure it is always upto date.
 
 ## Getting started
 
@@ -55,16 +55,15 @@ TanStack Query, Zod, and react-hook-form were kept: they're solving real problem
 brief (request cancellation/caching, schema validation, form state) rather than providing styled UI,
 so cutting them would mean re-implementing the same logic by hand with more risk, not less code.
 
-
 ## Where state lives, and why
 
-| State | Bucket | Why |
-|---|---|---|
-| Product list, product detail, categories, current user | **TanStack Query cache** | Server-owned data; never mirrored into `useState`, so there's one source of truth and automatic request de-duplication/cancellation. |
-| `q`, `category`, `sortBy`, `order`, `page` | **URL (`useSearchParams` / `router.push`)** | Must survive reload and be shareable over chat. `lib/url-state.ts` holds all the parsing/serializing/patching logic as pure functions — the page component reads/writes the URL, it never owns a parallel copy. |
-| Open item id | **Its own route**, `/items/[id]` | Required by the brief; see decision log for the trade-off this implies for "back to list". |
-| Search input's in-progress keystrokes | **Local `useState`** (`FiltersBar`'s `searchDraft`) | Debounced ~350ms before being pushed to the URL, so we're not rewriting history on every keystroke. This is UI state, not application state — it's fully derived from and reconciled back into the URL. |
-| Dialog open/closed, form field focus | **Local `useState` / react-hook-form internal state** | Scoped entirely to the component that owns it. |
+| State                                                  | Bucket                                                | Why                                                                                                                                                                                                             |
+| ------------------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product list, product detail, categories, current user | **TanStack Query cache**                              | Server-owned data; never mirrored into `useState`, so there's one source of truth and automatic request de-duplication/cancellation.                                                                            |
+| `q`, `category`, `sortBy`, `order`, `page`             | **URL (`useSearchParams` / `router.push`)**           | Must survive reload and be shareable over chat. `lib/url-state.ts` holds all the parsing/serializing/patching logic as pure functions — the page component reads/writes the URL, it never owns a parallel copy. |
+| Open item id                                           | **Its own route**, `/items/[id]`                      | Required by the brief; see decision log for the trade-off this implies for "back to list".                                                                                                                      |
+| Search input's in-progress keystrokes                  | **Local `useState`** (`FiltersBar`'s `searchDraft`)   | Debounced ~350ms before being pushed to the URL, so we're not rewriting history on every keystroke. This is UI state, not application state — it's fully derived from and reconciled back into the URL.         |
+| Dialog open/closed, form field focus                   | **Local `useState` / react-hook-form internal state** | Scoped entirely to the component that owns it.                                                                                                                                                                  |
 
 ## Fetching, caching, invalidation (TanStack Query)
 
@@ -121,7 +120,7 @@ layout, not a CSS shrink.
 ### Why the product queries never auto-refetch
 
 Because writes don't persist server-side, any background refetch of `['product', id]` or
-`['products', ...]` after a correction will always re-serve the *original* value — the mock server
+`['products', ...]` after a correction will always re-serve the _original_ value — the mock server
 has no idea a PUT ever happened. React Query's defaults (`staleTime: 0`, `refetchOnMount: true`)
 fire exactly that kind of "harmless" background refetch the moment a query remounts with data older
 than its staleTime — e.g. navigating from the item detail page back to `/stock` and back again, or
@@ -130,16 +129,17 @@ reverting to its pre-correction value a few seconds after being saved, with no e
 network activity, reported as "goes back to the initial value... when refreshed."
 
 The fix: `useProduct` and `useProducts` both use `staleTime: Infinity, gcTime: Infinity`. Once a
-query has data, nothing refetches it automatically for the rest of the tab's life; the cache *is*
+query has data, nothing refetches it automatically for the rest of the tab's life; the cache _is_
 the source of truth, updated only by an explicit mutation or by `ErrorState`'s "Try again" button
 (a genuine, user-initiated refetch, which still works normally for actual fetch failures — that's a
 different query state, `isError`, not a background revalidation of already-successful data).
-Regression coverage: `tests/optimistic-rollback.test.ts` → *"keeps a corrected value in cache
-indefinitely — no automatic revert on remount."*
+Regression coverage: `tests/optimistic-rollback.test.ts` → _"keeps a corrected value in cache
+indefinitely — no automatic revert on remount."_
 
 The trade-off: if this were a real backend shared across users/devices, `staleTime: Infinity` would
 mean never seeing someone else's change without a manual reload. For a single-operator session
 against a mock API, that trade-off is the right one — see the decision log entry below.
+
 - **No combined search+category+sort** — see above.
 - **`/auth/me` after refresh** — a successful `/auth/refresh` sets a new access token in memory; the
   next `/auth/me` call (or any authenticated call) uses it transparently via `apiFetch`, no manual
@@ -151,21 +151,23 @@ against a mock API, that trade-off is the right one — see the decision log ent
 ## Decision log
 
 **1. Item id in the URL as its own route (`/items/[id]`), not `?item=12` overlaying the list**
-- *Decision:* Dedicated route, as required by the brief.
-- *Rejected alternative:* `?item=12` on top of `/stock`, rendering the detail as a modal/overlay over
+
+- _Decision:_ Dedicated route, as required by the brief.
+- _Rejected alternative:_ `?item=12` on top of `/stock`, rendering the detail as a modal/overlay over
   the still-mounted list.
-- *Why:* A real route is trivially shareable and deep-linkable on its own — "someone pastes
+- _Why:_ A real route is trivially shareable and deep-linkable on its own — "someone pastes
   `/items/12` into chat" needs zero special-casing. The real trade-off this creates is "back to list":
   we solved it by passing `returnTo=<the exact list URL the user came from>` as a query param, rather
   than resetting to a bare `/stock`. The cost is a slightly longer URL; the benefit is the user never
-  loses their place. If two people open the same item link from *different* list states, `returnTo`
+  loses their place. If two people open the same item link from _different_ list states, `returnTo`
   correctly sends each of them back to their own filtered view rather than a shared one.
 
 **2. Token storage: access token in memory only, refresh token in `sessionStorage`**
-- *Decision:* `accessToken` is a module-level JS variable (lost on hard reload); `refreshToken` lives
+
+- _Decision:_ `accessToken` is a module-level JS variable (lost on hard reload); `refreshToken` lives
   in `sessionStorage`.
-- *Rejected alternatives:* (a) both in `localStorage`, (b) both in memory only, (c) httpOnly cookies.
-- *Why:* There's no backend of our own here, so we can't set an httpOnly cookie from a real server —
+- _Rejected alternatives:_ (a) both in `localStorage`, (b) both in memory only, (c) httpOnly cookies.
+- _Why:_ There's no backend of our own here, so we can't set an httpOnly cookie from a real server —
   that's the actually-correct answer for a production system and isn't available to us. Between the
   remaining options: `localStorage` for the refresh token would survive a full browser restart and be
   shared cross-tab, which is more persistence than a shared ward tablet needs and a slightly larger
@@ -176,10 +178,11 @@ against a mock API, that trade-off is the right one — see the decision log ent
   a shared device.
 
 **3. Stock correction: optimistic update, not pessimistic wait-then-update**
-- *Decision:* Update the cached stock value immediately on submit (`onMutate`), roll back on failure.
-- *Rejected alternative:* Wait for the `PUT` response before updating anything, only reflecting the
+
+- _Decision:_ Update the cached stock value immediately on submit (`onMutate`), roll back on failure.
+- _Rejected alternative:_ Wait for the `PUT` response before updating anything, only reflecting the
   new value once confirmed.
-- *Why:* Ward tablets are on patchy wifi — a pessimistic approach means every save feels laggy even
+- _Why:_ Ward tablets are on patchy wifi — a pessimistic approach means every save feels laggy even
   when it will succeed. Since DummyJSON's `PUT` doesn't persist anyway, "waiting for confirmation"
   doesn't buy real correctness here, only worse perceived latency. The optimistic approach is only
   defensible because we pair it with an honest rollback path: `tests/optimistic-rollback.test.ts`
@@ -187,20 +190,22 @@ against a mock API, that trade-off is the right one — see the decision log ent
   that would make this dangerous for a stock system.
 
 **4. Save button: disabled while pending, not spinner-while-clickable**
-- *Decision:* Both the login submit button and the stock-correction save button disable during their
+
+- _Decision:_ Both the login submit button and the stock-correction save button disable during their
   respective pending states, showing changed label text ("Signing in…" / "Saving…") rather than
   staying clickable with a spinner overlay.
-- *Rejected alternative:* Leave the button clickable with an inline spinner, allowing repeat clicks.
-- *Why:* On patchy wifi, a clickable-during-pending button invites duplicate submissions (double
+- _Rejected alternative:_ Leave the button clickable with an inline spinner, allowing repeat clicks.
+- _Why:_ On patchy wifi, a clickable-during-pending button invites duplicate submissions (double
   login attempts, or worse, two overlapping stock corrections racing each other). Disabling is the
   simpler, safer default for a form that mutates a shared resource, and we kept it consistent across
   both forms in the app rather than mixing patterns.
 
 **5. Debounce (350ms) for the search box**
-- *Decision:* 350ms debounce on the raw keystrokes before writing to the URL.
-- *Rejected alternative:* No debounce (write every keystroke straight to the URL), or a much longer
+
+- _Decision:_ 350ms debounce on the raw keystrokes before writing to the URL.
+- _Rejected alternative:_ No debounce (write every keystroke straight to the URL), or a much longer
   debounce (~800ms+).
-- *Why:* Sub-300ms debounces still generate a request-per-keystroke for fast typists; anything much
+- _Why:_ Sub-300ms debounces still generate a request-per-keystroke for fast typists; anything much
   past 400ms starts to feel unresponsive on a search box. 350ms is deliberately still fast enough
   that the race-condition guarantee (an old, slow response never overwriting a new, fast one) has to
   do real work rather than being masked by a debounce so long it rarely fires two overlapping
@@ -209,31 +214,33 @@ against a mock API, that trade-off is the right one — see the decision log ent
   combo the user just bounced away from" reasoning — see decision #7 for why that became `Infinity`.)
 
 **6. Bulk correction patches every cache entry that holds the item, not just the one being viewed**
-- *Decision:* both `useCorrectStock` and `useBulkCorrectStock` patch the single-item cache
+
+- _Decision:_ both `useCorrectStock` and `useBulkCorrectStock` patch the single-item cache
   (`['product', id]`) and every cached stock-list page (`['products', ...]`) that contains the
   affected product(s), in the same optimistic update / rollback pass.
-- *Rejected alternative:* patch only the cache for whatever screen triggered the correction (the
+- _Rejected alternative:_ patch only the cache for whatever screen triggered the correction (the
   detail page), and rely on `invalidateQueries` to eventually bring the list back in sync.
-- *Why:* this was a real bug found during review — correcting stock from the detail page updated
+- _Why:_ this was a real bug found during review — correcting stock from the detail page updated
   only `['product', id]`, so the list looked unchanged (stale) until its 15s `staleTime` lapsed and a
   refetch happened to fire. Worse, `invalidateQueries` isn't actually a fix here: since DummyJSON's
-  `PUT` doesn't persist server-side, a refetch would silently pull the *original*, uncorrected value
+  `PUT` doesn't persist server-side, a refetch would silently pull the _original_, uncorrected value
   back from the mock server, undoing the correction the user just made. Patching every relevant cache
   entry directly, without refetching, is the only way the optimistic value stays the source of truth
   for the session. `tests/optimistic-rollback.test.ts` covers both the patch and its rollback at the
   list-cache level, specifically to guard against this regressing again.
 
 **7. `staleTime`/`gcTime`: `Infinity` on the product queries, not a longer finite value**
-- *Decision:* `useProduct` and `useProducts` never consider their cached data stale and never garbage
+
+- _Decision:_ `useProduct` and `useProducts` never consider their cached data stale and never garbage
   collect it while the tab is open.
-- *Rejected alternative:* keep the original 15s (list) / default 0s (detail) staleTime, or just bump
+- _Rejected alternative:_ keep the original 15s (list) / default 0s (detail) staleTime, or just bump
   both to something longer like 5 minutes.
-- *Why:* this was a real, reported bug — a stock correction would silently revert to its
+- _Why:_ this was a real, reported bug — a stock correction would silently revert to its
   pre-correction value on its own, with no error, some time after being saved successfully. Root
   cause: with any finite staleTime, React Query's default `refetchOnMount` fires a background refetch
   the next time that exact query remounts with data older than its staleTime (leaving the item detail
   page and coming back, revisiting a list page/filter combo, etc.). Since DummyJSON's `PUT` never
-  persists server-side, that refetch always re-serves the *original* value and overwrites the
+  persists server-side, that refetch always re-serves the _original_ value and overwrites the
   optimistic patch. A longer finite value only widens the window before the same bug resurfaces; it
   doesn't fix it. `Infinity` is the honest expression of the actual constraint: this mock backend
   cannot produce a legitimately newer value than what's already in the cache, so there is nothing a

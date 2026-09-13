@@ -1,11 +1,5 @@
 import { cn } from '@/lib/utils';
 
-/**
- * Plain native <select>. Deliberately not a hand-rolled Radix-style listbox:
- * native selects already have correct keyboard/screen-reader behaviour on
- * every platform, and re-implementing that ourselves would be more code and
- * more risk for no real visual gain in this app.
- */
 export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select

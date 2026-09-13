@@ -8,10 +8,6 @@ interface EmptyStateProps {
   onAction?: () => void;
 }
 
-/**
- * Distinguishes "no results for this search/filter" (pass onAction to offer
- * a way to clear filters) from a genuine "nothing here" case (omit it).
- */
 export function EmptyState({ title, description, actionLabel, onAction }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-300 py-16 text-center">
@@ -21,7 +17,7 @@ export function EmptyState({ title, description, actionLabel, onAction }: EmptyS
         {description && <p className="text-sm text-slate-500">{description}</p>}
       </div>
       {actionLabel && onAction && (
-        <Button variant="outline" size="sm" onClick={onAction}>
+        <Button variant="outline" onClick={onAction}>
           {actionLabel}
         </Button>
       )}

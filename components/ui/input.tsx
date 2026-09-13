@@ -1,12 +1,6 @@
 import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-/**
- * Must forward its ref: react-hook-form's register() is uncontrolled — it
- * attaches a ref directly to the underlying <input> to read its value on
- * submit/validate. Without forwardRef here, that ref never reaches the real
- * DOM node, so RHF always sees the field as empty regardless of what's typed.
- */
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => {
     return (

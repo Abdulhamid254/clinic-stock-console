@@ -12,12 +12,6 @@ interface DialogProps {
   className?: string;
 }
 
-/**
- * Thin wrapper around the native <dialog> element instead of a Radix
- * primitive. showModal()/close() give us focus-trapping, Esc-to-close
- * (fires 'cancel'), and returning focus to whatever triggered the dialog —
- * all built into the browser, no dependency required.
- */
 export function Dialog({ open, onClose, title, description, children, className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();

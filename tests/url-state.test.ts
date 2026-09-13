@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { applyStockParamPatch, clampPage, parseStockParams, stockParamsToSearch } from '@/lib/url-state';
+import {
+  applyStockParamPatch,
+  clampPage,
+  parseStockParams,
+  stockParamsToSearch,
+} from '@/lib/url-state';
 import type { StockQueryParams } from '@/lib/types';
 
 const base: StockQueryParams = { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 };
@@ -64,7 +69,13 @@ describe('clampPage', () => {
 
 describe('parse/serialize round-trip', () => {
   it('restores the exact same params from a serialized search string', () => {
-    const params: StockQueryParams = { q: 'phone', category: '', sortBy: 'price', order: 'desc', page: 3 };
+    const params: StockQueryParams = {
+      q: 'phone',
+      category: '',
+      sortBy: 'price',
+      order: 'desc',
+      page: 3,
+    };
     const search = stockParamsToSearch(params);
     const restored = parseStockParams(new URLSearchParams(search));
     expect(restored).toEqual(params);

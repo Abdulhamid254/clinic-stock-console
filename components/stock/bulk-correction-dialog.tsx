@@ -17,19 +17,12 @@ interface BulkCorrectionDialogProps {
   onDone: () => void;
 }
 
-/**
- * Sets one stock value across every selected item. Same click-to-response
- * contract as the single-item StockCorrectionDialog (disable-while-pending,
- * can't dismiss mid-flight, typed value preserved on failure), with one
- * addition: failure here isn't all-or-nothing. DummyJSON fires N independent
- * PUTs, so some items can succeed while others fail. useBulkCorrectStock
- * already keeps the optimistic value for whichever items succeeded and
- * rolls back only the ones that didn't — this component's job is just to
- * report that split honestly rather than a blanket "it worked" or "it
- * failed". A full failure (every id failed) is reported the same way, just
- * with the count equal to the full selection.
- */
-export function BulkCorrectionDialog({ ids, open, onOpenChange, onDone }: BulkCorrectionDialogProps) {
+export function BulkCorrectionDialog({
+  ids,
+  open,
+  onOpenChange,
+  onDone,
+}: BulkCorrectionDialogProps) {
   const mutation = useBulkCorrectStock();
   const { showToast } = useToast();
   const [failureMessage, setFailureMessage] = useState<string | null>(null);
@@ -47,10 +40,6 @@ export function BulkCorrectionDialog({ ids, open, onOpenChange, onDone }: BulkCo
       setFailureMessage(null);
       mutation.reset();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitting
-    // `reset` and `mutation`: both are recreated every render by react-hook-form /
-    // TanStack Query, so including them would re-run this on every render instead
-    // of only when the dialog opens for a (possibly new) selection.
   }, [open]);
 
   function requestClose() {
@@ -123,7 +112,11 @@ export function BulkCorrectionDialog({ ids, open, onOpenChange, onDone }: BulkCo
               Cancel
             </Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Saving…' : failureMessage ? 'Retry save' : `Apply to ${ids.length}`}
+              {mutation.isPending
+                ? 'Saving…'
+                : failureMessage
+                  ? 'Retry save'
+                  : `Apply to ${ids.length}`}
             </Button>
           </div>
         </fieldset>

@@ -9,11 +9,19 @@ import { apiFetch } from '@/lib/api-client';
 import { useProducts } from '@/lib/queries/products';
 import type { StockQueryParams } from '@/lib/types';
 
-const baseParams: StockQueryParams = { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 };
+const baseParams: StockQueryParams = {
+  q: '',
+  category: '',
+  sortBy: 'title',
+  order: 'asc',
+  page: 1,
+};
 
 function wrapper(client: QueryClient) {
-  return ({ children }: { children: React.ReactNode }) =>
+  const Wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client }, children);
+  Wrapper.displayName = 'QueryClientTestWrapper';
+  return Wrapper;
 }
 
 describe('search race condition', () => {
@@ -30,7 +38,10 @@ describe('search race condition', () => {
     (apiFetch as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
       if (path.includes('q=first')) {
         return new Promise((resolve) =>
-          setTimeout(() => resolve({ products: [{ id: 1, title: 'FIRST-RESULT' }], total: 1 }), 100),
+          setTimeout(
+            () => resolve({ products: [{ id: 1, title: 'FIRST-RESULT' }], total: 1 }),
+            100,
+          ),
         );
       }
       if (path.includes('q=second')) {

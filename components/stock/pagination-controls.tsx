@@ -18,10 +18,14 @@ export function PaginationControls({ page, total, onPageChange }: PaginationCont
         Page {page} of {totalPages} &middot; {total} item{total === 1 ? '' : 's'}
       </p>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+        <Button variant="outline" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
           Previous
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+        <Button
+          variant="outline"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+        >
           Next
         </Button>
       </div>

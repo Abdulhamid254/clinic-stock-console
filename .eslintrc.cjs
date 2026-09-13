@@ -1,12 +1,16 @@
 module.exports = {
   root: true,
   extends: ['next/core-web-vitals', 'prettier'],
+  plugins: ['@typescript-eslint'],
   rules: {
     // Unused vars are a real bug most of the time, but our fetch-wrapper style
     // sometimes needs an intentionally-unused parameter (e.g. middleware.ts's
     // `_request`) to satisfy a function signature — allow the underscore escape
     // hatch instead of turning the check off.
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+    ],
 
     // `any` defeats the type safety the Zod schemas and query hooks are there
     // to provide. Use `unknown` + narrowing (see api-client.ts's ApiError checks)

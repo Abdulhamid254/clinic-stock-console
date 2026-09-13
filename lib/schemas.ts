@@ -6,9 +6,6 @@ export const loginSchema = z.object({
 });
 export type LoginFormValues = z.infer<typeof loginSchema>;
 
-// Stock correction: integer, non-negative. Capped at 100,000 as a sanity guardrail —
-// DummyJSON enforces nothing server-side, so this is the only real limit in the system.
-// See README decision log.
 export const stockCorrectionSchema = z.object({
   stock: z.coerce
     .number({ invalid_type_error: 'Enter a whole number' })

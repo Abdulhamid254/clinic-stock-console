@@ -1,13 +1,6 @@
 import { PAGE_SIZE, SORT_FIELDS, SORT_ORDERS } from './schemas';
 import type { SortField, SortOrder, StockQueryParams } from './types';
 
-/**
- * Pure helpers for the stock list's URL state. The URL is the single source
- * of truth for search/category/sort/page — these functions never touch
- * useState, so they're trivially unit-testable and reusable from both the
- * page component and tests.
- */
-
 const DEFAULTS: StockQueryParams = {
   q: '',
   category: '',

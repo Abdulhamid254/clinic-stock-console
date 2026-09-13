@@ -2,15 +2,6 @@ import { TokenRefreshCoordinator, type RefreshResult } from './token-refresh';
 
 const BASE_URL = 'https://dummyjson.com';
 
-// --- Token storage -----------------------------------------------------
-// Decision (see README decision log): accessToken lives in memory only
-// (module-level variable, lost on hard refresh — acceptable because /auth/me
-// re-hydrates it from the refreshToken on load). refreshToken lives in
-// sessionStorage: it survives a reload/tab-restore on the same device
-// (ward tablets left mid-session) but not a full browser restart, and isn't
-// shared cross-tab the way localStorage would be. Neither is httpOnly since
-// there's no backend of our own to set that cookie from.
-
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null) {
@@ -109,9 +100,10 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     try {
       await coordinator.refresh();
     } catch {
-      const next = typeof window !== 'undefined'
-        ? window.location.pathname + window.location.search
-        : '/stock';
+      const next =
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/stock';
       clearSession();
       throw new AuthExpiredError(next);
     }
