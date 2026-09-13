@@ -3,14 +3,6 @@ import { apiFetch } from '../api-client';
 import { PAGE_SIZE } from '../schemas';
 import type { Product, ProductListResponse, StockQueryParams } from '../types';
 
-/**
- * DummyJSON does not support combining search + category + sort server-side
- * in a single call (see README limitation notes). We resolve the three
- * possible request shapes here, in priority order: a search term wins over a
- * category filter, and sorting is applied via query params on top of
- * whichever base list we fetched. Client-side re-sort is NOT needed because
- * DummyJSON's sortBy/order params work on all three endpoints.
- */
 function buildProductsUrl(params: StockQueryParams): string {
   const skip = (params.page - 1) * PAGE_SIZE;
   const sortQs = `sortBy=${params.sortBy}&order=${params.order}`;
@@ -29,23 +21,6 @@ export function productsQueryKey(params: StockQueryParams) {
   return ['products', params] as const;
 }
 
-/**
- * staleTime/gcTime: Infinity is deliberate, not an oversight. This was the
- * root cause of "stock correction reverts when you navigate away and back
- * (or wait a bit) without a hard refresh": with a finite staleTime, React
- * Query's default refetchOnMount behaviour fires a silent background
- * refetch the next time this exact param combination remounts (e.g. paging
- * off /stock and back, or just re-rendering after the old 15s window
- * elapsed). Since DummyJSON's PUT is a mock that never persists server-side,
- * that "harmless" background refetch was overwriting the optimistic patch
- * with the original, uncorrected stock number a few seconds after the user
- * saw it succeed — no error, no visible network activity, just a silent
- * revert. Because this session's corrections have nowhere durable to live
- * except this cache, the cache has to be treated as the source of truth for
- * the life of the tab: never auto-revalidated, only ever updated by an
- * explicit mutation or an explicit user-initiated retry (see ErrorState's
- * onRetry, which still works for genuine fetch failures).
- */
 export function useProducts(params: StockQueryParams) {
   return useQuery({
     queryKey: productsQueryKey(params),
@@ -59,7 +34,8 @@ export function useProducts(params: StockQueryParams) {
 export function useCategories() {
   return useQuery({
     queryKey: ['categories'],
-    queryFn: () => apiFetch<Array<{ slug: string; name: string; url: string }>>('/products/categories'),
+    queryFn: () =>
+      apiFetch<Array<{ slug: string; name: string; url: string }>>('/products/categories'),
     staleTime: 5 * 60_000,
   });
 }
@@ -121,7 +97,9 @@ export function useCorrectStock(id: string) {
       await queryClient.cancelQueries({ queryKey: ['products'] });
 
       const previousProduct = queryClient.getQueryData<Product>(['product', id]);
-      const previousLists = queryClient.getQueriesData<ProductListResponse>({ queryKey: ['products'] });
+      const previousLists = queryClient.getQueriesData<ProductListResponse>({
+        queryKey: ['products'],
+      });
 
       if (previousProduct) {
         queryClient.setQueryData<Product>(['product', id], { ...previousProduct, stock });
@@ -181,9 +159,17 @@ export function useBulkCorrectStock() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ ids, stock }: { ids: number[]; stock: number }): Promise<BulkCorrectStockResult> => {
+    mutationFn: async ({
+      ids,
+      stock,
+    }: {
+      ids: number[];
+      stock: number;
+    }): Promise<BulkCorrectStockResult> => {
       const results = await Promise.allSettled(
-        ids.map((id) => apiFetch<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify({ stock }) })),
+        ids.map((id) =>
+          apiFetch<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify({ stock }) }),
+        ),
       );
       const failedIds = ids.filter((_, i) => results[i]!.status === 'rejected');
       return { failedIds };
@@ -192,7 +178,9 @@ export function useBulkCorrectStock() {
       await queryClient.cancelQueries({ queryKey: ['products'] });
       const idSet = new Set(ids);
 
-      const previousLists = queryClient.getQueriesData<ProductListResponse>({ queryKey: ['products'] });
+      const previousLists = queryClient.getQueriesData<ProductListResponse>({
+        queryKey: ['products'],
+      });
       const previousProducts = ids.map(
         (id) => [String(id), queryClient.getQueryData<Product>(['product', String(id)])] as const,
       );

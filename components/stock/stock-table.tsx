@@ -20,12 +20,6 @@ function stockBadge(stock: number) {
   return { label: 'In stock', className: 'bg-emerald-100 text-emerald-800' };
 }
 
-/**
- * Renders a real <table> at wider widths and a stacked card layout below
- * the sm breakpoint, per the 360px responsiveness requirement — a squeezed
- * table is not readable at that width. Selection checkboxes (for bulk
- * correction) are wired identically in both layouts.
- */
 export function StockTable({
   products,
   returnTo,
@@ -70,7 +64,12 @@ export function StockTable({
                   <p className="text-sm capitalize text-slate-500">{product.category}</p>
                   <div className="mt-1 flex items-center gap-2 text-sm">
                     <span>${product.price.toFixed(2)}</span>
-                    <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', badge.className)}>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        badge.className,
+                      )}
+                    >
                       {badge.label} ({product.stock})
                     </span>
                   </div>
@@ -106,7 +105,10 @@ export function StockTable({
             {products.map((product) => {
               const badge = stockBadge(product.stock);
               return (
-                <tr key={product.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                <tr
+                  key={product.id}
+                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                >
                   <td className="w-10 p-3">
                     <input
                       type="checkbox"
@@ -136,7 +138,12 @@ export function StockTable({
                   <td className="p-3 capitalize text-slate-500">{product.category}</td>
                   <td className="p-3">${product.price.toFixed(2)}</td>
                   <td className="p-3">
-                    <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', badge.className)}>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        badge.className,
+                      )}
+                    >
                       {badge.label} ({product.stock})
                     </span>
                   </td>
