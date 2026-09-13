@@ -11,7 +11,12 @@ import { LoadingState } from '@/components/shared/loading-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorState } from '@/components/shared/error-state';
 import { useProducts } from '@/lib/queries/products';
-import { applyStockParamPatch, clampPage, parseStockParams, stockParamsToSearch } from '@/lib/url-state';
+import {
+  applyStockParamPatch,
+  clampPage,
+  parseStockParams,
+  stockParamsToSearch,
+} from '@/lib/url-state';
 import type { StockQueryParams } from '@/lib/types';
 
 function StockPageInner() {
@@ -25,18 +30,12 @@ function StockPageInner() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
 
-  // Selection is scoped to the current page/filter view. Changing any of
-  // them changes which rows are even on screen, so a stale selection from a
-  // previous page would silently apply to the wrong items — clear it.
   useEffect(() => {
     setSelectedIds(new Set());
   }, [params.q, params.category, params.sortBy, params.order, params.page]);
 
   const updateParams = useCallback(
     (patch: Partial<StockQueryParams>) => {
-      // DummyJSON can't combine search + category server-side: setting one
-      // clears the other, so the request we actually send stays meaningful
-      // instead of silently ignoring whichever the API can't honour.
       if ('q' in patch && patch.q) patch.category = '';
       if ('category' in patch && patch.category) patch.q = '';
 
@@ -46,8 +45,6 @@ function StockPageInner() {
     [params, pathname, router],
   );
 
-  // Clamp a shared/stale URL's page against the real total once we know it,
-  // so opening an old link never renders a blank table with no way out.
   useEffect(() => {
     if (!data) return;
     const clamped = clampPage(params.page, data.total);
@@ -55,8 +52,6 @@ function StockPageInner() {
       updateParams({ page: clamped });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitting
-    // updateParams: it's derived fresh from `params` every render, so including it
-    // would re-run this effect on every render instead of only when data/page change.
   }, [data, params.page]);
 
   const currentUrl = `${pathname}${stockParamsToSearch(params)}`;
@@ -97,7 +92,9 @@ function StockPageInner() {
       ) : !data || data.products.length === 0 ? (
         <EmptyState
           title={hasActiveFilters ? 'No items match your filters' : 'No stock items found'}
-          description={hasActiveFilters ? 'Try a different search term or clear your filters.' : undefined}
+          description={
+            hasActiveFilters ? 'Try a different search term or clear your filters.' : undefined
+          }
           actionLabel={hasActiveFilters ? 'Clear filters' : undefined}
           onAction={hasActiveFilters ? () => updateParams({ q: '', category: '' }) : undefined}
         />
@@ -116,7 +113,11 @@ function StockPageInner() {
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
           />
-          <PaginationControls page={params.page} total={data.total} onPageChange={(page) => updateParams({ page })} />
+          <PaginationControls
+            page={params.page}
+            total={data.total}
+            onPageChange={(page) => updateParams({ page })}
+          />
           <BulkCorrectionDialog
             ids={Array.from(selectedIds)}
             open={bulkDialogOpen}
@@ -131,7 +132,13 @@ function StockPageInner() {
 
 export default function StockPage() {
   return (
-    <Suspense fallback={<div className="p-8"><LoadingState rows={6} /></div>}>
+    <Suspense
+      fallback={
+        <div className="p-8">
+          <LoadingState rows={6} />
+        </div>
+      }
+    >
       <StockPageInner />
     </Suspense>
   );
