@@ -20,24 +20,12 @@ const AuthContext = createContext<AuthContextValue>({
 
 const PUBLIC_ROUTES = ['/login'];
 
-/**
- * App-load hydration: we never persist the access token itself across a hard
- * reload (see api-client.ts decision note), only the refresh token. So on
- * mount, if we have a refresh token but no in-memory access token yet, this
- * provider is responsible for restoring the session before route guards
- * decide whether to bounce the user to /login.
- */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Nothing to restore beyond marking ourselves hydrated: if there's no
-    // access token but a refresh token exists in sessionStorage, the very
-    // first apiFetch('/auth/me') call below will get a 401 (missing/invalid
-    // bearer token), which triggers api-client's existing refresh-and-retry
-    // path using that stored refresh token. No special-casing needed here.
     setHydrated(true);
   }, []);
 
@@ -54,7 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [hydrated, isLoading, isError, isPublic, canAttemptSession, pathname, router]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading: !hydrated || isLoading, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{ user, isLoading: !hydrated || isLoading, isAuthenticated: !!user }}
+    >
       {children}
     </AuthContext.Provider>
   );
