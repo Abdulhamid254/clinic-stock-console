@@ -267,3 +267,17 @@ pass"):
       showing a blank screen.
 - [ ] `format:check`, `lint`, and `test` all fail the pipeline on a deliberately broken commit, then
       pass again once fixed.
+
+## CI/CD SETUP
+
+The project was deployed in vercel
+-Used a built in Git intergration - conncecting it to github repository then vercel handles the automation builds.
+-Firstly run vercel Login - helps us to login to our cel account
+-Secondly on the root project we run vercel - helps to test the deployment and the cli asks a few setup questions and automaticall configures the settings & generates a preview file.
+-Lastly we run vercel --prod - upon verifying that the preview works we push it to the live main branch.
+A point to note is that the main branch triggers the main branch triggers the automation.
+
+## AI REFLECTION
+
+I used AI in the testing sections to write the test.Although i disagreed with it with the suggestions that it had brought forward which was testing the modals and forms.aia believed those to be too basic and instead chose to go with the token refresh test,url stste test,search race test & and optimistic rolback test as this are some of the important features within the application.
+-I also did not use use tools like opensec as wanted alittle bit of control and used prettier,eslint to format and eslint to enforce linters.I also achieved structure by grouping code by features or layers eg Components.
