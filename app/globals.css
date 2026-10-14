@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Delete or replace the old @tailwind lines with this single line */
+@import 'tailwindcss';
 
 @layer base {
   :focus-visible {

@@ -40,6 +40,7 @@ function StockPageInner() {
       if ('category' in patch && patch.category) patch.q = '';
 
       const next = applyStockParamPatch(params, patch);
+      //appends that text string onto your current page URL
       router.push(`${pathname}${stockParamsToSearch(next)}`);
     },
     [params, pathname, router],

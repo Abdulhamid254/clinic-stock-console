@@ -49,7 +49,9 @@ describe('optimistic stock correction rollback', () => {
   });
 
   it('restores the previous cached stock value when the mutation fails', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
     client.setQueryData(['product', '1'], product);
 
     (apiFetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('http 500'));
@@ -73,7 +75,9 @@ describe('optimistic stock correction rollback', () => {
   });
 
   it('keeps the optimistic value once the mutation succeeds', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
     client.setQueryData(['product', '1'], product);
 
     (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ...product, stock: 12 });
@@ -93,7 +97,9 @@ describe('optimistic stock correction rollback', () => {
     // immediately if the user navigates back to /stock, without a refetch
     // (DummyJSON's PUT doesn't persist, so a refetch would just re-serve the
     // old value from the mock server).
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
     client.setQueryData(['product', '1'], product);
     client.setQueryData(
       ['products', { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 }],
@@ -120,8 +126,13 @@ describe('optimistic stock correction rollback', () => {
   });
 
   it('rolls back the cached list page too if the mutation fails', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    const listKey = ['products', { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 }] as const;
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const listKey = [
+      'products',
+      { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 },
+    ] as const;
     client.setQueryData(['product', '1'], product);
     client.setQueryData(listKey, listPage);
 
@@ -135,7 +146,9 @@ describe('optimistic stock correction rollback', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
 
-    const cachedList = client.getQueryData<ProductListResponse>(listKey as unknown as readonly unknown[]);
+    const cachedList = client.getQueryData<ProductListResponse>(
+      listKey as unknown as readonly unknown[],
+    );
     expect(cachedList?.products.find((p) => p.id === 1)?.stock).toBe(40);
   });
 
@@ -146,7 +159,9 @@ describe('optimistic stock correction rollback', () => {
   // mutation, confirming the rollback and the surfaced message both work
   // for a true server error, not just a generic thrown Error.
   it('rolls back and surfaces the real message on an HTTP 500 from the server', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
     client.setQueryData(['product', '1'], product);
 
     (apiFetch as ReturnType<typeof vi.fn>).mockRejectedValue(
@@ -187,7 +202,9 @@ describe('optimistic stock correction rollback', () => {
 
     (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ...product, stock: 7 });
 
-    const { result, unmount } = renderHook(() => useCorrectStock('1'), { wrapper: wrapper(client) });
+    const { result, unmount } = renderHook(() => useCorrectStock('1'), {
+      wrapper: wrapper(client),
+    });
     act(() => {
       result.current.mutate({ id: 1, stock: 7 });
     });
@@ -216,8 +233,13 @@ describe('optimistic stock correction rollback', () => {
     // failed item silently kept its optimistic value with no rollback and no
     // way for the UI to know. This asserts the fix: id 2 is restored to its
     // real prior stock (15) while id 1 keeps the new value (99).
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    const listKey = ['products', { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 }] as const;
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const listKey = [
+      'products',
+      { q: '', category: '', sortBy: 'title', order: 'asc', page: 1 },
+    ] as const;
     client.setQueryData(listKey, listPage);
 
     (apiFetch as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
@@ -236,7 +258,9 @@ describe('optimistic stock correction rollback', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.failedIds).toEqual([2]);
 
-    const cachedList = client.getQueryData<ProductListResponse>(listKey as unknown as readonly unknown[]);
+    const cachedList = client.getQueryData<ProductListResponse>(
+      listKey as unknown as readonly unknown[],
+    );
     expect(cachedList?.products.find((p) => p.id === 1)?.stock).toBe(99);
     expect(cachedList?.products.find((p) => p.id === 2)?.stock).toBe(15);
   });
