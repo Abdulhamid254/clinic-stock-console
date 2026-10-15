@@ -96,7 +96,7 @@ ignore.In simple terms we are using astrict priority ladder to handle endpoint r
 
 ## Responsiveness
 
-Verified at 360px width specifically:ensuring that the application is responsive not only at the big screen but also medium screens mirroring tablets screen.
+Verified at 360px width specifically:ensuring that the application is responsive not only at the big screen but also medium screens mirroring tablets screen.The app is fully responsive.
 
 ## DummyJSON limitations and workarounds
 
